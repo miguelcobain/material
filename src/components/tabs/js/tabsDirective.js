@@ -124,6 +124,8 @@ function TabsDirective($parse, $mdTheming) {
       angular.element(element[0].querySelector('.md-header-items')).append(clone);
     });
 
+    angular.element(element[0].querySelector('.md-header-items')).append('<div flex ng-if="!pagination.active">');
+
     function configureAria() {
       element.attr({
         role: 'tablist'

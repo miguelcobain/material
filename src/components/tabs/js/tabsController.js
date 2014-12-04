@@ -39,6 +39,12 @@ function MdTabsController($scope, $element, $mdUtil) {
     }
   });
 
+  $scope.$watch(function () {
+    return $element.html();
+  }, function () {
+    $scope.$broadcast('$mdTabsChanged');
+  });
+
   // Get the selected tab
   function selected() {
     return self.itemAt($scope.selectedIndex);
