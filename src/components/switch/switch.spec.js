@@ -18,33 +18,24 @@ describe('<md-switch>', function() {
       $rootScope.green = true;
     });
 
-    var cbElements = angular.element(element[0].querySelectorAll('.md-switch-thumb'));
+    var switches = angular.element(element[0].querySelectorAll('md-switch'));
 
-    expect(cbElements.eq(0).hasClass(CHECKED_CSS)).toEqual(false);
-    expect(cbElements.eq(1).hasClass(CHECKED_CSS)).toEqual(true);
-    // expect(cbElements.eq(0).attr('aria-checked')).toEqual('false');
-    // expect(cbElements.eq(1).attr('aria-checked')).toEqual('true');
-    expect(cbElements.eq(0).attr('role')).toEqual('checkbox');
-  }));
+    expect(switches.eq(0).hasClass(CHECKED_CSS)).toEqual(false);
+    expect(switches.eq(1).hasClass(CHECKED_CSS)).toEqual(true);
+    expect(switches.eq(0).attr('aria-checked')).toEqual('false');
+    expect(switches.eq(1).attr('aria-checked')).toEqual('true');
+    expect(switches.eq(0).attr('role')).toEqual('checkbox');
 
-  it('should be disabled with disabled attr', inject(function($compile, $rootScope) {
-    var element = $compile('<div>' +
-                             '<md-switch ng-model="blue">' +
-                             '</md-switch>' +
-                           '</div>')($rootScope);
+    $rootScope.$apply(function(){
+      $rootScope.blue = true;
+      $rootScope.green = false;
+    });
 
-    var switchThumb = angular.element(element[0].querySelectorAll('.md-switch-thumb'));
-
-    $rootScope.$apply('blue = false');
-    switchThumb.attr('disabled', 'true');
-
-    switchThumb.triggerHandler('click');
-    expect($rootScope.blue).toBe(false);
-
-    switchThumb.removeAttr('disabled');
-
-    switchThumb.triggerHandler('click');
-    expect($rootScope.blue).toBe(true);
+    expect(switches.eq(1).hasClass(CHECKED_CSS)).toEqual(false);
+    expect(switches.eq(0).hasClass(CHECKED_CSS)).toEqual(true);
+    expect(switches.eq(1).attr('aria-checked')).toEqual('false');
+    expect(switches.eq(0).attr('aria-checked')).toEqual('true');
+    expect(switches.eq(1).attr('role')).toEqual('checkbox');
   }));
 
 });

@@ -48,7 +48,6 @@ angular.module('material.components.checkbox', [
  */
 function MdCheckboxDirective(inputDirective, $mdInkRipple, $mdAria, $mdConstant, $mdTheming) {
   inputDirective = inputDirective[0];
-
   var CHECKED_CSS = 'md-checked';
 
   return {
@@ -77,15 +76,6 @@ function MdCheckboxDirective(inputDirective, $mdInkRipple, $mdAria, $mdConstant,
       var checked = false;
       $mdTheming(element);
 
-      // Create a mock ngModel if the user doesn't provide one
-      ngModelCtrl = ngModelCtrl || {
-        $setViewValue: function(value) {
-          this.$viewValue = value;
-        },
-        $parsers: [],
-        $formatters: []
-      };
-
       $mdAria.expectWithText(tElement, 'aria-label');
 
       // Reuse the original input[type=checkbox] directive from Angular core.
@@ -96,7 +86,11 @@ function MdCheckboxDirective(inputDirective, $mdInkRipple, $mdAria, $mdConstant,
         0: {}
       }, attr, [ngModelCtrl]);
 
-      element.on('click', listener);
+      // Used by switch. in Switch, we don't want click listeners; we have more granular
+      // touchup/touchdown listening.
+      if (!attr.noClick) {
+        element.on('click', listener);
+      }
       element.on('keypress', keypressHandler);
       ngModelCtrl.$render = render;
 
