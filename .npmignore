@@ -1,0 +1,8 @@
+# ignore all kind of files
+*
+
+# whitelist directories
+# !*/
+
+# except scss files
+!src/**/*.scss
