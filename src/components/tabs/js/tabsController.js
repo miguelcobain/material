@@ -230,13 +230,13 @@ function MdTabsController ($scope, $element, $window, $mdConstant, $mdTabInkRipp
    * @param {string|number} left
    */
   function handleOffsetChange (left) {
-    var elements = getElements();
     var newValue = ((ctrl.shouldCenterTabs || isRtl() ? '' : '-') + left + 'px');
 
     // Fix double-negative which can happen with RTL support
     newValue = newValue.replace('--', '');
 
-    angular.element(elements.paging).css($mdConstant.CSS.TRANSFORM, 'translate(' + newValue + ', 0)');
+    angular.element(getElements().paging).css($mdConstant.CSS.TRANSFORM,
+                                              'translate(' + newValue + ', 0)');
     $scope.$broadcast('$mdTabsPaginationChanged');
   }
 
@@ -348,12 +348,16 @@ function MdTabsController ($scope, $element, $window, $mdConstant, $mdTabInkRipp
 
   /**
    * When pagination is on, this makes sure the selected index is in view.
-   * @param event
+   * @param {WheelEvent} event
    */
   function scroll (event) {
     if (!ctrl.shouldPaginate) return;
     event.preventDefault();
-    ctrl.offsetLeft = fixOffset(ctrl.offsetLeft - event.wheelDelta);
+    if (event.deltaY) {
+      ctrl.offsetLeft = fixOffset(ctrl.offsetLeft + event.deltaY);
+    } else if (event.deltaX) {
+      ctrl.offsetLeft = fixOffset(ctrl.offsetLeft + event.deltaX);
+    }
   }
 
   /**
@@ -435,11 +439,11 @@ function MdTabsController ($scope, $element, $window, $mdConstant, $mdTabInkRipp
    * Create an entry in the tabs array for a new tab at the specified index.
    * @param {Object} tabData tab to insert
    * @param {number} index location to insert the new tab
-   * @returns {*}
+   * @returns {Object} the inserted tab
    */
   function insertTab (tabData, index) {
     var hasLoaded = loaded;
-    var proto     = {
+    var proto = {
           getIndex:     function () { return ctrl.tabs.indexOf(tab); },
           isActive:     function () { return this.getIndex() === ctrl.selectedIndex; },
           isLeft:       function () { return this.getIndex() < ctrl.selectedIndex; },
@@ -451,24 +455,27 @@ function MdTabsController ($scope, $element, $window, $mdConstant, $mdTabInkRipp
           },
           id:           $mdUtil.nextUid(),
           hasContent: !!(tabData.template && tabData.template.trim())
-        },
-        tab       = angular.extend(proto, tabData);
+    };
+    var tab = angular.extend(proto, tabData);
+
     if (angular.isDefined(index)) {
       ctrl.tabs.splice(index, 0, tab);
     } else {
       ctrl.tabs.push(tab);
     }
-
     processQueue();
     updateHasContent();
+
     $mdUtil.nextTick(function () {
       updatePagination();
       setAriaControls(tab);
 
       // if autoselect is enabled, select the newly added tab
-      if (hasLoaded && ctrl.autoselect) $mdUtil.nextTick(function () {
-        $mdUtil.nextTick(function () { select(ctrl.tabs.indexOf(tab)); });
-      });
+      if (hasLoaded && ctrl.autoselect) {
+        $mdUtil.nextTick(function () {
+          $mdUtil.nextTick(function () { select(ctrl.tabs.indexOf(tab)); });
+        });
+      }
     });
     return tab;
   }
@@ -572,17 +579,20 @@ function MdTabsController ($scope, $element, $window, $mdConstant, $mdTabInkRipp
     });
 
     shouldPaginate = canvasWidth < 0;
-    // Work around width calculation issues on IE11 when pagination is enabled
-    if (shouldPaginate) {
-      getElements().paging.style.width = '999999px';
-    } else {
-      getElements().paging.style.width = undefined;
+    // Work around width calculation issues on IE11 when pagination is enabled.
+    // Don't do this on other browsers because it breaks scroll to new tab animation.
+    if ($mdUtil.msie) {
+      if (shouldPaginate) {
+        getElements().paging.style.width = '999999px';
+      } else {
+        getElements().paging.style.width = undefined;
+      }
     }
     return shouldPaginate;
   }
 
   /**
-   * Finds the nearest tab index that is available.  This is primarily used for when the active
+   * Finds the nearest tab index that is available. This is primarily used for when the active
    * tab is removed.
    * @param newIndex
    * @returns {*}
@@ -907,8 +917,8 @@ function MdTabsController ($scope, $element, $window, $mdConstant, $mdTabInkRipp
 
   /**
    * Takes an offset value and makes sure that it is within the min/max allowed values.
-   * @param value
-   * @returns {*}
+   * @param {number} value
+   * @returns {number}
    */
   function fixOffset (value) {
     var elements = getElements();

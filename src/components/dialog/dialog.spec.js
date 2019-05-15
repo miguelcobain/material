@@ -629,6 +629,47 @@ describe('$mdDialog', function() {
       expect(container.length).toBe(0);
       expect(response).toBe(undefined);
     }));
+
+    it('should only remove the top most dialog on escape', inject(function($mdDialog, $timeout, $mdConstant) {
+
+        var root = angular.element('<div></div>');
+        var parent = '<md-dialog class="one"></md-dialog>';
+        var child = '<md-dialog class="two"></md-dialog>';
+        var grandchild = '<md-dialog class="three"></md-dialog>';
+
+        $mdDialog.show({
+            template: parent,
+            multiple: true,
+            parent: root,
+        });
+        runAnimation();
+
+        $mdDialog.show({
+            template: child,
+            multiple: true,
+            parent: root[0].querySelector('md-dialog.one'),
+        });
+        runAnimation();
+
+        $mdDialog.show({
+            template: grandchild,
+            multiple: true,
+            parent: root[0].querySelector('md-dialog.two'),
+        });
+        runAnimation();
+
+        root.triggerHandler({
+            type: 'keydown',
+            keyCode: $mdConstant.KEY_CODE.ESCAPE
+        });
+        runAnimation();
+
+        expect(root[0].querySelectorAll('md-dialog.one').length).toBe(1);
+        expect(root[0].querySelectorAll('md-dialog.two').length).toBe(1);
+        expect(root[0].querySelectorAll('md-dialog.three').length).toBe(0);
+
+    }));
+
   });
 
   describe('#prompt()', function() {
@@ -1437,6 +1478,44 @@ describe('$mdDialog', function() {
 
       expect(parent[0].querySelectorAll('md-dialog.one').length).toBe(0);
       expect(parent[0].querySelectorAll('md-dialog.two').length).toBe(0);
+    }));
+
+    it('should be able to close a dialog when a child dialog fails to compile', inject(function ($mdDialog, $q) {
+
+        var root = angular.element('<div>');
+
+        var parent =  angular.element('<md-dialog class="one"></md-dialog>');
+
+        var child = angular.element('<md-dialog class="two"></md-dialog>');
+
+        $mdDialog.show({
+            template: parent,
+            multiple: true,
+            parent: root,
+        });
+        runAnimation();
+
+        expect(root[0].querySelectorAll('md-dialog').length).toBe(1);
+
+        $mdDialog.show({
+            template: child,
+            multiple: true,
+            parent: parent,
+            resolve: {
+                fail: function () {
+                    return $q.reject();
+                }
+            },
+        });
+        runAnimation();
+
+        expect(root[0].querySelectorAll('md-dialog').length).toBe(1);
+
+        $mdDialog.hide();
+        runAnimation();
+
+        expect(root[0].querySelectorAll('md-dialog').length).toBe(0);
+
     }));
 
     describe('contentElement', function() {

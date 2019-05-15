@@ -335,10 +335,16 @@ function(SERVICES, COMPONENTS, DEMOS, PAGES, $location, $rootScope, $http, $wind
   });
 
   sections.push({
-        name: 'Contributors',
-        url: 'contributors',
-        type: 'link'
-      });
+    name: 'Migration to Angular',
+    url: 'migration',
+    type: 'link'
+  });
+
+  sections.push({
+    name: 'Contributors',
+    url: 'contributors',
+    type: 'link'
+  });
 
   sections.push({
     name: 'License',
@@ -491,7 +497,7 @@ function(SERVICES, COMPONENTS, DEMOS, PAGES, $location, $rootScope, $http, $wind
   }
 }])
 
-.directive('menuLink', function() {
+.directive('menuLink', ['scrollCache', function(scrollCache) {
   return {
     scope: {
       section: '='
@@ -508,10 +514,12 @@ function(SERVICES, COMPONENTS, DEMOS, PAGES, $location, $rootScope, $http, $wind
         // set flag to be used later when
         // $locationChangeSuccess calls openPage()
         controller.autoFocusContent = true;
+        // set flag to be used later when $routeChangeStart saves scroll position
+        scrollCache.linkClicked = true;
       };
     }
   };
-})
+}])
 
 .directive('menuToggle', ['$mdUtil', '$animateCss', '$$rAF', function($mdUtil, $animateCss, $$rAF) {
   return {
@@ -635,7 +643,8 @@ function($scope, COMPONENTS, BUILDCONFIG, $mdSidenav, $timeout, $mdDialog, menu,
   this.autoFocusContent = false;
 
 
-  var mainContentArea = document.querySelector("[role='main']");
+  var mainContentArea = document.querySelector("main");
+  var mainContentHeader = mainContentArea.querySelector(".md-breadcrumb");
   var scrollContentEl = mainContentArea.querySelector('md-content[md-scroll-y]');
 
 
@@ -674,12 +683,13 @@ function($scope, COMPONENTS, BUILDCONFIG, $mdSidenav, $timeout, $mdDialog, menu,
   }
 
   function focusMainContent($event) {
+    $scope.closeMenu();
     // prevent skip link from redirecting
     if ($event) { $event.preventDefault(); }
 
     $timeout(function(){
-      mainContentArea.focus();
-    },90);
+      mainContentHeader.focus();
+    }, 90);
 
   }
 
@@ -881,4 +891,78 @@ function($rootScope, $scope, component, demos, $templateRequest) {
       }
     }
   };
-});
+})
+
+.factory('scrollCache', function() {
+  var cache = {};
+  var linkClicked = false;
+
+  function setScroll(key, scrollPostion) {
+    cache[key] = scrollPostion;
+  }
+
+  function getScroll(key) {
+    return cache[key] || 0;
+  }
+
+  return {
+    getScroll: getScroll,
+    setScroll: setScroll,
+    linkClicked: linkClicked
+  };
+})
+
+/**
+ * This directive caches the scroll position for each route + templateUrl combination.
+ * This helps in restoring the scroll when the user uses back or forward navigation to return
+ * to a page.
+ */
+.directive('cacheScrollPosition', ['$route', '$mdUtil', '$timeout', '$location', '$anchorScroll',
+  'scrollCache',
+function($route, $mdUtil, $timeout, $location, $anchorScroll, scrollCache) {
+  var mainContentArea = document.querySelector("main");
+  var scrollContentEl = mainContentArea.querySelector('md-content[md-scroll-y]');
+
+  /**
+   * @param {Object} event Synthetic event object
+   * @param {Object} next Future route information
+   * @param {Object} current Current route information
+   */
+  var handleRouteChangeStart = function (event, next, current) {
+    // store scroll position for the current path + template
+    if ($route.current) {
+      scrollCache.setScroll(current.loadedTemplateUrl + ":" + current.$$route.originalPath,
+        scrollContentEl.scrollTop);
+    }
+
+    // set scroll to 0 for next route, if explicitly clicked on link.
+    if (scrollCache.linkClicked) {
+      scrollCache.setScroll(next.$$route.templateUrl + ":" + next.$$route.originalPath, 0);
+      scrollCache.linkClicked = false;
+    }
+  };
+
+  /**
+   * @param {Object} event Synthetic event object
+   * @param {Object} current Current route information
+   */
+  var handleRouteChangeSuccess = function (event, current) {
+    // if hash is specified explicitly, it trumps previously stored scroll position
+    if ($location.hash()) {
+      $anchorScroll();
+    } else {
+      // Get previous scroll position; if none, scroll to the top of the page
+      var prevScrollPos = scrollCache.getScroll(current.loadedTemplateUrl + ":" +
+        current.$$route.originalPath);
+
+      $timeout(function() {
+        $mdUtil.animateScrollTo(scrollContentEl, prevScrollPos);
+      }, 0);
+    }
+  };
+
+  return function(scope) {
+    scope.$on('$routeChangeStart', handleRouteChangeStart);
+    scope.$on('$routeChangeSuccess', handleRouteChangeSuccess);
+  }
+}]);

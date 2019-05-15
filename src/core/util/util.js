@@ -157,7 +157,13 @@ function UtilFactory($document, $timeout, $compile, $rootScope, $$mdAnimate, $in
      * @returns {number}
      */
     getViewportTop: function() {
-      return window.scrollY || window.pageYOffset || 0;
+      // If body scrolling is disabled, then use the cached viewport top value, otherwise get it
+      // fresh from the $window.
+      if ($mdUtil.disableScrollAround._count && $mdUtil.disableScrollAround._viewPortTop) {
+        return $mdUtil.disableScrollAround._viewPortTop;
+      } else {
+        return $window.scrollY || $window.pageYOffset || 0;
+      }
     },
 
     /**
@@ -232,6 +238,7 @@ function UtilFactory($document, $timeout, $compile, $rootScope, $$mdAnimate, $in
 
       return $mdUtil.disableScrollAround._restoreScroll = function() {
         if (--$mdUtil.disableScrollAround._count <= 0) {
+          delete $mdUtil.disableScrollAround._viewPortTop;
           restoreBody();
           restoreElement();
           delete $mdUtil.disableScrollAround._restoreScroll;
@@ -282,6 +289,7 @@ function UtilFactory($document, $timeout, $compile, $rootScope, $$mdAnimate, $in
         var prevBodyStyle = body.style.cssText || '';
 
         var viewportTop = $mdUtil.getViewportTop();
+        $mdUtil.disableScrollAround._viewPortTop = viewportTop;
         var clientWidth = body.clientWidth;
         var hasVerticalScrollbar = body.scrollHeight > body.clientHeight + 1;
 
@@ -802,7 +810,7 @@ function UtilFactory($document, $timeout, $compile, $rootScope, $$mdAnimate, $in
     /**
      * Animate the requested element's scrollTop to the requested scrollPosition with basic easing.
      *
-     * @param {!HTMLElement} element The element to scroll.
+     * @param {!Element} element The element to scroll.
      * @param {number} scrollEnd The new/final scroll position.
      * @param {number=} duration Duration of the scroll. Default is 1000ms.
      */
@@ -893,7 +901,14 @@ function UtilFactory($document, $timeout, $compile, $rootScope, $$mdAnimate, $in
       // The XMLSerializer API is supported on IE11 and is the recommended workaround.
       var serializer = new XMLSerializer();
       return serializer.serializeToString(element);
-    }
+    },
+
+    /**
+     * Support: IE 9-11 only
+     * documentMode is an IE-only property
+     * http://msdn.microsoft.com/en-us/library/ie/cc196988(v=vs.85).aspx
+     */
+    msie: window.document.documentMode
   };
 
   // Instantiate other namespace utility methods
