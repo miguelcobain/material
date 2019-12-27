@@ -33,8 +33,8 @@ angular.module('material.components.select', [
  * @module material.components.select
  *
  * @description Displays a select box, bound to an `ng-model`. Selectable options are defined using
- * the <a ng-href="/api/directive/mdOption">md-option</a> element directive. Options can be grouped
- * using the <a ng-href="/api/directive/mdOptgroup">md-optgroup</a> element directive.
+ * the <a ng-href="api/directive/mdOption">md-option</a> element directive. Options can be grouped
+ * using the <a ng-href="api/directive/mdOptgroup">md-optgroup</a> element directive.
  *
  * When the select is required and uses a floating label, then the label will automatically contain
  * an asterisk (`*`). This behavior can be disabled by using the `md-no-asterisk` attribute.
@@ -362,16 +362,9 @@ function SelectDirective($mdSelect, $mdUtil, $mdConstant, $mdTheming, $mdAria, $
       };
 
       if (!isReadonly) {
-        element
-          .on('focus', function(ev) {
-            // Always focus the container (if we have one) so floating labels and other styles are
-            // applied properly
-            containerCtrl && containerCtrl.setFocused(true);
-          });
-
-        // Attach before ngModel's blur listener to stop propagation of blur event
-        // to prevent from setting $touched.
-        element.on('blur', function(event) {
+        var handleBlur = function(event) {
+          // Attach before ngModel's blur listener to stop propagation of blur event
+          // and prevent setting $touched.
           if (untouched) {
             untouched = false;
             if (selectScope._mdSelectIsOpen) {
@@ -379,10 +372,17 @@ function SelectDirective($mdSelect, $mdUtil, $mdConstant, $mdTheming, $mdAria, $
             }
           }
 
-          if (selectScope._mdSelectIsOpen) return;
           containerCtrl && containerCtrl.setFocused(false);
           inputCheckValue();
-        });
+        };
+        var handleFocus = function(ev) {
+          // Always focus the container (if we have one) so floating labels and other styles are
+          // applied properly
+          containerCtrl && containerCtrl.setFocused(true);
+        };
+
+        element.on('focus', handleFocus);
+        element.on('blur', handleBlur);
       }
 
       mdSelectCtrl.triggerClose = function() {
@@ -510,7 +510,6 @@ function SelectDirective($mdSelect, $mdUtil, $mdConstant, $mdTheming, $mdAria, $
       });
 
 
-
       function inputCheckValue() {
         // The select counts as having a value if one or more options are selected,
         // or if the input's validity state says it has bad input (eg string in a number input)
@@ -573,7 +572,6 @@ function SelectDirective($mdSelect, $mdUtil, $mdConstant, $mdTheming, $mdAria, $
           loadingAsync: attr.mdOnOpen ? scope.$eval(attr.mdOnOpen) || true : false
         }).finally(function() {
           selectScope._mdSelectIsOpen = false;
-          element.focus();
           element.attr('aria-expanded', 'false');
           ngModelCtrl.$setTouched();
         });
@@ -839,7 +837,8 @@ function SelectMenuDirective($parse, $mdUtil, $mdConstant, $mdTheming) {
         // the current option, which will be added, then we can be sure, that the validation
         // of the option has occurred before the option was added properly.
         // This means, that we have to manually trigger a new validation of the current option.
-        if (angular.isDefined(self.ngModel.$modelValue) && self.hashGetter(self.ngModel.$modelValue) === hashKey) {
+        if (angular.isDefined(self.ngModel.$$rawModelValue) &&
+            self.hashGetter(self.ngModel.$$rawModelValue) === hashKey) {
           self.ngModel.$validate();
         }
 
@@ -911,9 +910,9 @@ function SelectMenuDirective($parse, $mdUtil, $mdConstant, $mdTheming) {
  * @restrict E
  * @module material.components.select
  *
- * @description Displays an option in a <a ng-href="/api/directive/mdSelect">md-select</a> box's
+ * @description Displays an option in a <a ng-href="api/directive/mdSelect">md-select</a> box's
  * dropdown menu. Options can be grouped using
- * <a ng-href="/api/directive/mdOptgroup">md-optgroup</a> element directives.
+ * <a ng-href="api/directive/mdOptgroup">md-optgroup</a> element directives.
  *
  * ### Option Params
  *
@@ -951,7 +950,7 @@ function SelectMenuDirective($parse, $mdUtil, $mdConstant, $mdTheming) {
  * `ng-model` like `$scope.selectedValue = 1`. Use `ng-value="1"` in this case and other cases where
  * you have values that are not strings.
  *
- * **Note:** Please see our <a ng-href="/api/directive/mdSelect#selects-and-object-equality">docs on
+ * **Note:** Please see our <a ng-href="api/directive/mdSelect#selects-and-object-equality">docs on
  * using objects with `md-select`</a> for additional guidance on using the `trackBy` option with
  * `ng-model-options`.
  *
@@ -1119,11 +1118,11 @@ function OptionDirective($mdButtonInkRipple, $mdUtil, $mdTheming) {
  * @module material.components.select
  *
  * @description Displays a label separating groups of
- * <a ng-href="/api/directive/mdOption">md-option</a> element directives in a
- * <a ng-href="/api/directive/mdSelect">md-select</a> box's dropdown menu.
+ * <a ng-href="api/directive/mdOption">md-option</a> element directives in a
+ * <a ng-href="api/directive/mdSelect">md-select</a> box's dropdown menu.
  *
  * **Note:** When using `md-select-header` element directives within a `md-select`, the labels that
- * would normally be added to the <a ng-href="/api/directive/mdOptgroup">md-optgroup</a> directives
+ * would normally be added to the <a ng-href="api/directive/mdOptgroup">md-optgroup</a> directives
  * are omitted, allowing the `md-select-header` to represent the option group label
  * (and possibly more).
  *

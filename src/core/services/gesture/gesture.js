@@ -14,14 +14,18 @@ var forceSkipClickHijack = false, disableAllGestures = false;
  */
 var lastLabelClickPos = null;
 
-// Used to attach event listeners once when multiple ng-apps are running.
+/**
+ * Used to attach event listeners once when multiple ng-apps are running.
+ * @type {boolean}
+ */
 var isInitialized = false;
 
 /**
  * @ngdoc module
  * @name material.core.gestures
  * @description
- * AngularJS Material Gesture handling for touch devices. This module replaced the usage of the hammerjs library.
+ * AngularJS Material Gesture handling for touch devices.
+ * This module replaced the usage of the HammerJS library.
  */
 angular
   .module('material.core.gestures', [])
@@ -36,10 +40,11 @@ angular
  *
  * @description
  * In some scenarios on mobile devices (without jQuery), the click events should NOT be hijacked.
- * `$mdGestureProvider` is used to configure the Gesture module to ignore or skip click hijacking on mobile
- * devices.
+ * `$mdGestureProvider` is used to configure the Gesture module to ignore or skip click hijacking
+ * on mobile devices.
  *
- * You can also change the max click distance, `6px` by default, if you have issues on some touch screens.
+ * You can also change the max click distance, `6px` by default, if you have issues on some touch
+ * screens.
  *
  * <hljs lang="js">
  *   app.config(function($mdGestureProvider) {
@@ -98,8 +103,8 @@ MdGestureProvider.prototype = {
    * $get is used to build an instance of $mdGesture
    * @ngInject
    */
-  $get : function($$MdGestureHandler, $$rAF, $timeout) {
-       return new MdGesture($$MdGestureHandler, $$rAF, $timeout);
+  $get : function($$MdGestureHandler, $$rAF, $timeout, $mdUtil) {
+       return new MdGesture($$MdGestureHandler, $$rAF, $timeout, $mdUtil);
   }
 };
 
@@ -109,20 +114,17 @@ MdGestureProvider.prototype = {
  * MdGesture factory construction function
  * @ngInject
  */
-function MdGesture($$MdGestureHandler, $$rAF, $timeout) {
-  var userAgent = navigator.userAgent || navigator.vendor || window.opera;
-  var isIos = userAgent.match(/ipad|iphone|ipod/i);
-  var isAndroid = userAgent.match(/android/i);
+function MdGesture($$MdGestureHandler, $$rAF, $timeout, $mdUtil) {
   var touchActionProperty = getTouchAction();
-  var hasJQuery =  (typeof window.jQuery !== 'undefined') && (angular.element === window.jQuery);
+  var hasJQuery = (typeof window.jQuery !== 'undefined') && (angular.element === window.jQuery);
 
   var self = {
     handler: addHandler,
     register: register,
-    isAndroid: isAndroid,
-    isIos: isIos,
+    isAndroid: $mdUtil.isAndroid,
+    isIos: $mdUtil.isIos,
     // On mobile w/out jQuery, we normally intercept clicks. Should we skip that?
-    isHijackingClicks: (isIos || isAndroid) && !hasJQuery && !forceSkipClickHijack
+    isHijackingClicks: ($mdUtil.isIos || $mdUtil.isAndroid) && !hasJQuery && !forceSkipClickHijack
   };
 
   if (self.isHijackingClicks) {
@@ -384,8 +386,8 @@ function MdGesture($$MdGestureHandler, $$rAF, $timeout) {
  * A gesture will manage its lifecycle through the start,move,end, and cancel
  * functions, which are called by native dom events.
  *
- * A gesture has the concept of 'options' (eg a swipe's required velocity), which can be
- * overridden by elements registering through $mdGesture.register()
+ * A gesture has the concept of 'options' (eg. a swipe's required velocity), which can be
+ * overridden by elements registering through $mdGesture.register().
  */
 function GestureHandler (name) {
   this.name = name;
@@ -432,8 +434,8 @@ function MdGestureHandler() {
     },
     end: function (ev, pointer) {
       if (!this.state.isRunning) return;
-      this.onEnd(ev, pointer);
       this.state.isRunning = false;
+      this.onEnd(ev, pointer);
     },
     cancel: function (ev, pointer) {
       this.onCancel(ev, pointer);
@@ -477,7 +479,7 @@ function MdGestureHandler() {
 
   return GestureHandler;
 
-  /*
+  /**
    * Dispatch an event with jQuery
    * TODO: Make sure this sends bubbling events
    *
@@ -519,40 +521,62 @@ function MdGestureHandler() {
     var eventObj;
 
     if (eventType === 'click' || eventType === 'mouseup' || eventType === 'mousedown') {
-      eventObj = document.createEvent('MouseEvents');
-      eventObj.initMouseEvent(
-        eventType, true, true, window, srcEvent.detail,
-        eventPointer.x, eventPointer.y, eventPointer.x, eventPointer.y,
-        srcEvent.ctrlKey, srcEvent.altKey, srcEvent.shiftKey, srcEvent.metaKey,
-        srcEvent.button, srcEvent.relatedTarget || null
-      );
-
+      if (typeof window.MouseEvent === "function") {
+        eventObj = new MouseEvent(eventType, {
+          bubbles: true,
+          cancelable: true,
+          screenX: Number(srcEvent.screenX),
+          screenY: Number(srcEvent.screenY),
+          clientX: Number(eventPointer.x),
+          clientY: Number(eventPointer.y),
+          ctrlKey: srcEvent.ctrlKey,
+          altKey: srcEvent.altKey,
+          shiftKey: srcEvent.shiftKey,
+          metaKey: srcEvent.metaKey,
+          button: srcEvent.button,
+          buttons: srcEvent.buttons,
+          relatedTarget: srcEvent.relatedTarget || null
+        });
+      } else {
+        eventObj = document.createEvent('MouseEvents');
+        // This has been deprecated
+        // https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/initMouseEvent
+        eventObj.initMouseEvent(
+          eventType, true, true, window, srcEvent.detail,
+          eventPointer.x, eventPointer.y, eventPointer.x, eventPointer.y,
+          srcEvent.ctrlKey, srcEvent.altKey, srcEvent.shiftKey, srcEvent.metaKey,
+          srcEvent.button, srcEvent.relatedTarget || null
+        );
+      }
     } else {
-      eventObj = document.createEvent('CustomEvent');
-      eventObj.initCustomEvent(eventType, true, true, {});
+      if (typeof window.CustomEvent === "function") {
+        eventObj = new CustomEvent(eventType, {
+          bubbles: true,
+          cancelable: true,
+          detail: {}
+        });
+      } else {
+        // This has been deprecated
+        // https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent/initCustomEvent
+        eventObj = document.createEvent('CustomEvent');
+        eventObj.initCustomEvent(eventType, true, true, {});
+      }
     }
     eventObj.$material = true;
     eventObj.pointer = eventPointer;
     eventObj.srcEvent = srcEvent;
     eventPointer.target.dispatchEvent(eventObj);
   }
-
 }
 
 /**
  * Attach Gestures: hook document and check shouldHijack clicks
  * @ngInject
  */
-function attachToDocument($mdGesture, $$MdGestureHandler) {
+function attachToDocument($mdGesture, $$MdGestureHandler, $mdUtil) {
   if (disableAllGestures) {
     return;
   }
-
-  // Polyfill document.contains for IE11.
-  // TODO: move to util
-  document.contains || (document.contains = function (node) {
-    return document.body.contains(node);
-  });
 
   if (!isInitialized && $mdGesture.isHijackingClicks) {
     /*
@@ -589,18 +613,26 @@ function attachToDocument($mdGesture, $$MdGestureHandler) {
     }
   }
 
+  /**
+   * Ignore click events that don't come from AngularJS Material, Ionic, Input Label clicks,
+   * or key presses that generate click events. This helps to ignore the ghost tap events on
+   * older mobile browsers that get sent after a 300-400ms delay.
+   * @param ev MouseEvent or modified MouseEvent with $material, pointer, and other fields
+   */
   function clickHijacker(ev) {
-    var isKeyClick = ev.clientX === 0 && ev.clientY === 0;
-    var isSubmitEvent = ev.target && ev.target.type === 'submit';
-    if (!isKeyClick && !ev.$material && !ev.isIonicTap
-      && !isInputEventFromLabelClick(ev)
-      && !isSubmitEvent) {
+    var isKeyClick;
+    if ($mdUtil.isIos) {
+      isKeyClick = angular.isDefined(ev.webkitForce) && ev.webkitForce === 0;
+    } else {
+      isKeyClick = ev.clientX === 0 && ev.clientY === 0;
+    }
+    if (!isKeyClick && !ev.$material && !ev.isIonicTap && !isInputEventFromLabelClick(ev)) {
       ev.preventDefault();
       ev.stopPropagation();
       lastLabelClickPos = null;
     } else {
       lastLabelClickPos = null;
-      if (ev.target.tagName.toLowerCase() == 'label') {
+      if (ev.target.tagName.toLowerCase() === 'label') {
         lastLabelClickPos = {x: ev.x, y: ev.y};
       }
     }
@@ -621,10 +653,10 @@ function attachToDocument($mdGesture, $$MdGestureHandler) {
       lastPointer = pointer = null;
     });
 
-  /*
+  /**
    * When a DOM event happens, run all registered gesture handlers' lifecycle
    * methods which match the DOM event.
-   * Eg when a 'touchstart' event happens, runHandlers('start') will call and
+   * Eg. when a 'touchstart' event happens, runHandlers('start') will call and
    * run `handler.cancel()` and `handler.start()` on all registered handlers.
    */
   function runHandlers(handlerEvent, event) {
@@ -638,7 +670,6 @@ function attachToDocument($mdGesture, $$MdGestureHandler) {
           handler.cancel();
         }
         handler[handlerEvent](event, pointer);
-
       }
     }
   }
@@ -665,9 +696,11 @@ function attachToDocument($mdGesture, $$MdGestureHandler) {
 
     runHandlers('start', ev);
   }
-  /*
+
+  /**
    * If a move event happens of the right type, update the pointer and run all the move handlers.
-   * "of the right type": if a mousemove happens but our pointer started with a touch event, do nothing.
+   * "of the right type": if a mousemove happens but our pointer started with a touch event, do
+   * nothing.
    */
   function gestureMove(ev) {
     if (!pointer || !typesMatch(ev, pointer)) return;
@@ -675,8 +708,10 @@ function attachToDocument($mdGesture, $$MdGestureHandler) {
     updatePointerState(ev, pointer);
     runHandlers('move', ev);
   }
-  /*
-   * If an end event happens of the right type, update the pointer, run endHandlers, and save the pointer as 'lastPointer'
+
+  /**
+   * If an end event happens of the right type, update the pointer, run endHandlers, and save the
+   * pointer as 'lastPointer'.
    */
   function gestureEnd(ev) {
     if (!pointer || !typesMatch(ev, pointer)) return;
@@ -740,8 +775,8 @@ function typesMatch(ev, pointer) {
  */
 function isInputEventFromLabelClick(event) {
   return lastLabelClickPos
-      && lastLabelClickPos.x == event.x
-      && lastLabelClickPos.y == event.y;
+      && lastLabelClickPos.x === event.x
+      && lastLabelClickPos.y === event.y;
 }
 
 /*

@@ -27,18 +27,28 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
       debouncedOnResize    = $mdUtil.debounce(onWindowResize),
       mode                 = MODE_VIRTUAL; // default
 
+  /**
+   * The root document element. This is used for attaching a top-level click handler to
+   * close the options panel when a click outside said panel occurs. We use `documentElement`
+   * instead of body because, when scrolling is disabled, some browsers consider the body element
+   * to be completely off the screen and propagate events directly to the html element.
+   * @type {!Object} angular.JQLite
+   */
+  ctrl.documentElement = angular.element(document.documentElement);
+
   // Public Exported Variables with handlers
   defineProperty('hidden', handleHiddenChange, true);
 
   // Public Exported Variables
-  ctrl.scope      = $scope;
-  ctrl.parent     = $scope.$parent;
-  ctrl.itemName   = itemParts[ 0 ];
-  ctrl.matches    = [];
-  ctrl.loading    = false;
-  ctrl.hidden     = true;
-  ctrl.index      = null;
-  ctrl.id         = $mdUtil.nextUid();
+  ctrl.scope = $scope;
+  ctrl.parent = $scope.$parent;
+  ctrl.itemName = itemParts[0];
+  ctrl.matches = [];
+  ctrl.loading = false;
+  ctrl.hidden = true;
+  ctrl.index = -1;
+  ctrl.activeOption = null;
+  ctrl.id = $mdUtil.nextUid();
   ctrl.isDisabled = null;
   ctrl.isRequired = null;
   ctrl.isReadonly = null;
@@ -46,20 +56,20 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
   ctrl.selectedMessage = $scope.selectedMessage || 'selected';
 
   // Public Exported Methods
-  ctrl.keydown                       = keydown;
-  ctrl.blur                          = blur;
-  ctrl.focus                         = focus;
-  ctrl.clear                         = clearValue;
-  ctrl.select                        = select;
-  ctrl.listEnter                     = onListEnter;
-  ctrl.listLeave                     = onListLeave;
-  ctrl.mouseUp                       = onMouseup;
-  ctrl.getCurrentDisplayValue        = getCurrentDisplayValue;
-  ctrl.registerSelectedItemWatcher   = registerSelectedItemWatcher;
+  ctrl.keydown = keydown;
+  ctrl.blur = blur;
+  ctrl.focus = focus;
+  ctrl.clear = clearValue;
+  ctrl.select = select;
+  ctrl.listEnter = onListEnter;
+  ctrl.listLeave = onListLeave;
+  ctrl.focusInput = focusInputElement;
+  ctrl.getCurrentDisplayValue = getCurrentDisplayValue;
+  ctrl.registerSelectedItemWatcher = registerSelectedItemWatcher;
   ctrl.unregisterSelectedItemWatcher = unregisterSelectedItemWatcher;
-  ctrl.notFoundVisible               = notFoundVisible;
-  ctrl.loadingIsVisible              = loadingIsVisible;
-  ctrl.positionDropdown              = positionDropdown;
+  ctrl.notFoundVisible = notFoundVisible;
+  ctrl.loadingIsVisible = loadingIsVisible;
+  ctrl.positionDropdown = positionDropdown;
 
   /**
    * Report types to be used for the $mdLiveAnnouncer
@@ -92,6 +102,10 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
 
       gatherElements();
       moveDropdown();
+
+      // Touch devices often do not send a click event on tap. We still want to focus the input
+      // and open the options pop-up in these cases.
+      $element.on('touchstart', focusInputElement);
 
       // Forward all focus events to the input element when autofocus is enabled
       if ($scope.autofocus) {
@@ -231,6 +245,22 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
   }
 
   /**
+   * Update the activeOption based on the selected item in the listbox.
+   * The activeOption is used in the template to set the aria-activedescendant attribute, which
+   * enables screen readers to properly handle visual focus within the listbox and announce the
+   * item's place in the list. I.e. "List item 3 of 50". Anytime that `ctrl.index` changes, this
+   * function needs to be called to update the activeOption.
+   */
+  function updateActiveOption() {
+    var selectedOption = elements.scroller.querySelector('.selected');
+    if (selectedOption) {
+      ctrl.activeOption = selectedOption.id;
+    } else {
+      ctrl.activeOption = null;
+    }
+  }
+
+  /**
    * Sets up any watchers used by autocomplete
    */
   function configureWatchers () {
@@ -341,11 +371,30 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
   // event/change handlers
 
   /**
+   * @param {Event} $event
+   */
+  function preventDefault($event) {
+    $event.preventDefault();
+  }
+
+  /**
+   * @param {Event} $event
+   */
+  function stopPropagation($event) {
+    $event.stopPropagation();
+  }
+
+  /**
    * Handles changes to the `hidden` property.
-   * @param hidden
-   * @param oldHidden
+   * @param {boolean} hidden true to hide the options pop-up, false to show it.
+   * @param {boolean} oldHidden the previous value of hidden
    */
   function handleHiddenChange (hidden, oldHidden) {
+    var scrollContainerElement;
+
+    if (elements) {
+      scrollContainerElement = angular.element(elements.scrollContainer);
+    }
     if (!hidden && oldHidden) {
       positionDropdown();
 
@@ -354,10 +403,23 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
       reportMessages(true, ReportType.Count | ReportType.Selected);
 
       if (elements) {
-        $mdUtil.disableScrollAround(elements.ul);
-        enableWrapScroll = disableElementScrollEvents(angular.element(elements.wrap));
+        $mdUtil.disableScrollAround(elements.scrollContainer);
+        enableWrapScroll = disableElementScrollEvents(elements.wrap);
+        if ($mdUtil.isIos) {
+          ctrl.documentElement.on('touchend', handleTouchOutsidePanel);
+          if (scrollContainerElement) {
+            scrollContainerElement.on('touchstart touchmove touchend', stopPropagation);
+          }
+        }
+        $mdUtil.nextTick(updateActiveOption);
       }
     } else if (hidden && !oldHidden) {
+      if ($mdUtil.isIos) {
+        ctrl.documentElement.off('touchend', handleTouchOutsidePanel);
+        if (scrollContainerElement) {
+          scrollContainerElement.off('touchstart touchmove touchend', stopPropagation);
+        }
+      }
       $mdUtil.enableScrolling();
 
       if (enableWrapScroll) {
@@ -368,20 +430,27 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
   }
 
   /**
-   * Disables scrolling for a specific element
+   * Handling touch events that bubble up to the document is required for closing the dropdown
+   * panel on touch outside of the options pop-up panel on iOS.
+   * @param {Event} $event
+   */
+  function handleTouchOutsidePanel($event) {
+    ctrl.hidden = true;
+    // iOS does not blur the pop-up for touches on the scroll mask, so we have to do it.
+    doBlur(true);
+  }
+
+  /**
+   * Disables scrolling for a specific element.
+   * @param {!string|!DOMElement} element to disable scrolling
+   * @return {Function} function to call to re-enable scrolling for the element
    */
   function disableElementScrollEvents(element) {
-
-    function preventDefault(e) {
-      e.preventDefault();
-    }
-
-    element.on('wheel', preventDefault);
-    element.on('touchmove', preventDefault);
+    var elementToDisable = angular.element(element);
+    elementToDisable.on('wheel touchmove', preventDefault);
 
     return function() {
-      element.off('wheel', preventDefault);
-      element.off('touchmove', preventDefault);
+      elementToDisable.off('wheel touchmove', preventDefault);
     };
   }
 
@@ -399,13 +468,6 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
     if (!hasFocus && !ctrl.hidden) elements.input.focus();
     noBlur = false;
     ctrl.hidden = shouldHide();
-  }
-
-  /**
-   * When the mouse button is released, send focus back to the input field.
-   */
-  function onMouseup () {
-    elements.input.focus();
   }
 
   /**
@@ -489,8 +551,8 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
 
   /**
    * Handles changes to the searchText property.
-   * @param searchText
-   * @param previousSearchText
+   * @param {string} searchText
+   * @param {string} previousSearchText
    */
   function handleSearchText (searchText, previousSearchText) {
     ctrl.index = getDefaultIndex();
@@ -539,7 +601,7 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
 
   /**
    * Force blur on input element
-   * @param forceBlur
+   * @param {boolean} forceBlur
    */
   function doBlur(forceBlur) {
     if (forceBlur) {
@@ -574,17 +636,17 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
         if (ctrl.loading || hasSelection()) return;
         event.stopPropagation();
         event.preventDefault();
-        ctrl.index   = Math.min(ctrl.index + 1, ctrl.matches.length - 1);
+        ctrl.index = Math.min(ctrl.index + 1, ctrl.matches.length - 1);
+        $mdUtil.nextTick(updateActiveOption);
         updateScroll();
-        reportMessages(false, ReportType.Selected);
         break;
       case $mdConstant.KEY_CODE.UP_ARROW:
         if (ctrl.loading || hasSelection()) return;
         event.stopPropagation();
         event.preventDefault();
-        ctrl.index   = ctrl.index < 0 ? ctrl.matches.length - 1 : Math.max(0, ctrl.index - 1);
+        ctrl.index = ctrl.index < 0 ? ctrl.matches.length - 1 : Math.max(0, ctrl.index - 1);
+        $mdUtil.nextTick(updateActiveOption);
         updateScroll();
-        reportMessages(false, ReportType.Selected);
         break;
       case $mdConstant.KEY_CODE.TAB:
         // If we hit tab, assume that we've left the list so it will close
@@ -635,7 +697,7 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
 
   /**
    * Returns the display value for an item.
-   * @param item
+   * @param {*} item
    * @returns {*}
    */
   function getDisplayValue (item) {
@@ -651,7 +713,7 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
     /**
      * Getter function to invoke user-defined expression (in the directive)
      * to convert your object to a single string.
-     * @param item
+     * @param {*} item
      * @returns {string|null}
      */
     function getItemText (item) {
@@ -661,7 +723,7 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
 
   /**
    * Returns the locals object for compiling item templates.
-   * @param item
+   * @param {*} item
    * @returns {Object|undefined}
    */
   function getItemAsNameVal (item) {
@@ -799,14 +861,14 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
    * Defines a public property with a handler and a default value.
    * @param {string} key
    * @param {Function} handler function
-   * @param {*} value default value
+   * @param {*} defaultValue default value
    */
-  function defineProperty (key, handler, value) {
+  function defineProperty (key, handler, defaultValue) {
     Object.defineProperty(ctrl, key, {
-      get: function () { return value; },
+      get: function () { return defaultValue; },
       set: function (newValue) {
-        var oldValue = value;
-        value        = newValue;
+        var oldValue = defaultValue;
+        defaultValue        = newValue;
         handler(newValue, oldValue);
       }
     });
@@ -833,8 +895,12 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
 
   /**
    * Clears the searchText value and selected item.
+   * @param {Event} $event
    */
-  function clearValue () {
+  function clearValue ($event) {
+    if ($event) {
+      $event.stopPropagation();
+    }
     clearSelectedItem();
     clearSearchText();
   }
@@ -844,7 +910,8 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
    */
   function clearSelectedItem () {
     // Reset our variables
-    ctrl.index = 0;
+    ctrl.index = -1;
+    $mdUtil.nextTick(updateActiveOption);
     ctrl.matches = [];
   }
 
@@ -971,7 +1038,7 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
   function updateVirtualScroll() {
     // elements in virtual scroll have consistent heights
     var optionHeight = elements.li[0].offsetHeight,
-        top = optionHeight * ctrl.index,
+        top = optionHeight * Math.max(0, ctrl.index),
         bottom = top + optionHeight,
         containerHeight = elements.scroller.clientHeight,
         scrollTop = elements.scroller.scrollTop;
@@ -985,7 +1052,7 @@ function MdAutocompleteCtrl ($scope, $element, $mdUtil, $mdConstant, $mdTheming,
 
   function updateStandardScroll() {
     // elements in standard scroll have variable heights
-    var selected =  elements.li[ctrl.index] || elements.li[0];
+    var selected =  elements.li[Math.max(0, ctrl.index)];
     var containerHeight = elements.scrollContainer.offsetHeight,
         top = selected && selected.offsetTop || 0,
         bottom = top + selected.clientHeight,

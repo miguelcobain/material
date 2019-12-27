@@ -2541,7 +2541,7 @@ function MdPanelPosition($injector) {
   this._$window = $injector.get('$window');
 
   /** @private {boolean} */
-  this._isRTL = $injector.get('$mdUtil').bidi() === 'rtl';
+  this._isRTL = $injector.get('$mdUtil').isRtl();
 
   /** @private @const {!angular.$mdConstant} */
   this._$mdConstant = $injector.get('$mdConstant');
@@ -3371,7 +3371,7 @@ MdPanelAnimation.prototype.animateOpen = function(panelEl) {
 
       var openScale = animator.calculateZoomToOrigin(
               panelEl, this._openFrom) || '';
-      openFrom = animator.toTransformCss(openScale + ' ' + panelTransform);
+      openFrom = animator.toTransformCss(panelTransform + ' ' + openScale);
       break;
 
     case MdPanelAnimation.animation.FADE:
@@ -3436,7 +3436,7 @@ MdPanelAnimation.prototype.animateClose = function(panelEl) {
 
       var closeScale = animator.calculateZoomToOrigin(
               panelEl, this._closeTo) || '';
-      closeTo = animator.toTransformCss(closeScale + ' ' + panelTransform);
+      closeTo = animator.toTransformCss(panelTransform + ' ' + closeScale);
       break;
 
     case MdPanelAnimation.animation.FADE:

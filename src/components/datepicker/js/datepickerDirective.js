@@ -109,8 +109,7 @@
           '<input ' +
             (ariaLabelValue ? 'aria-label="' + ariaLabelValue + '" ' : '') +
             'class="md-datepicker-input" ' +
-            'aria-haspopup="true" ' +
-            'aria-expanded="{{ctrl.isCalendarOpen}}" ' +
+            'aria-haspopup="dialog" ' +
             'ng-focus="ctrl.setFocused(true)" ' +
             'ng-blur="ctrl.setFocused(false)"> ' +
             triangleButton +
@@ -325,7 +324,7 @@
     this.isFocused = false;
 
     /** @type {boolean} */
-    this.isDisabled;
+    this.isDisabled = undefined;
     this.setDisabled($element[0].disabled || angular.isString($attrs.disabled));
 
     /** @type {boolean} Whether the date-picker's calendar pane is open. */
@@ -334,7 +333,7 @@
     /** @type {boolean} Whether the calendar should open when the input is focused. */
     this.openOnFocus = $attrs.hasOwnProperty('mdOpenOnFocus');
 
-    /** @final */
+    /** @type {Object} Instance of the mdInputContainer controller */
     this.mdInputContainer = null;
 
     /**
@@ -530,7 +529,7 @@
 
     // Add event listener through angular so that we can triggerHandler in unit tests.
     self.ngInputElement.on('keydown', function(event) {
-      if (event.altKey && event.keyCode == keyCodes.DOWN_ARROW) {
+      if (event.altKey && event.keyCode === keyCodes.DOWN_ARROW) {
         self.openCalendarPane(event);
         $scope.$digest();
       }
@@ -538,6 +537,15 @@
 
     if (self.openOnFocus) {
       self.ngInputElement.on('focus', angular.bind(self, self.openCalendarPane));
+      self.ngInputElement.on('click', function(event) {
+        event.stopPropagation();
+      });
+      self.ngInputElement.on('pointerdown',function(event) {
+        if (event.target && event.target.setPointerCapture) {
+          event.target.setPointerCapture(event.pointerId);
+        }
+      });
+
       angular.element(self.$window).on('blur', self.windowBlurHandler);
 
       $scope.$on('$destroy', function() {
@@ -551,7 +559,7 @@
   };
 
   /**
-   * Capture properties set to the date-picker and imperitively handle internal changes.
+   * Capture properties set to the date-picker and imperatively handle internal changes.
    * This is done to avoid setting up additional $watches.
    */
   DatePickerCtrl.prototype.installPropertyInterceptors = function() {
@@ -639,9 +647,9 @@
   };
 
   /**
-   * Check to see if the input is valid as the validation should fail if the model is invalid
+   * Check to see if the input is valid, as the validation should fail if the model is invalid.
    *
-   * @param {String} inputString
+   * @param {string} inputString
    * @param {Date} parsedDate
    * @return {boolean} Whether the input is valid
    */
@@ -822,12 +830,12 @@
       // Attach click listener inside of a timeout because, if this open call was triggered by a
       // click, we don't want it to be immediately propagated up to the body and handled.
       var self = this;
-      this.$timeout(function() {
+      this.$mdUtil.nextTick(function() {
         // Use 'touchstart` in addition to click in order to work on iOS Safari, where click
         // events aren't propagated under most circumstances.
         // See http://www.quirksmode.org/blog/archives/2014/02/mouse_event_bub.html
         self.documentElement.on('click touchstart', self.bodyClickHandler);
-      }, 100);
+      }, false);
 
       window.addEventListener(this.windowEventName, this.windowEventHandler);
     }
